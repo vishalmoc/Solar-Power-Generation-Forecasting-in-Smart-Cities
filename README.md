@@ -1,2 +1,2 @@
 # Solar-Power-Generation-Forecasting-in-Smart-Cities
-Solar power forecasting using ML and Explainable AI (SHAP). Uses Berkeley dataset with LightGBM, XGBoost, and RNN models for 7-, 15-, and 30-day forecasts. LightGBM gives best long-term accuracy; SHAP shows Distance to Solar Noon and Sky Cover as key factors in power prediction.
+Solar power forecasting using Random Forest, SVR, CNN, CNN-LSTM, and Seq2Seq models on the BigML dataset. Models evaluated with MSE, RMSE, MAE, R². SHAP used for explainable AI to interpret feature impact and improve smart city solar energy prediction accuracy.
