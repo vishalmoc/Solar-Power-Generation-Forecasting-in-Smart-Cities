@@ -1,43 +1,119 @@
-## Solar-Power-Generation-Forecasting-in-Smart-Cities
-Solar power forecasting using Random Forest, SVR, CNN, CNN-LSTM, and Seq2Seq models on the BigML dataset. Models evaluated with MSE, RMSE, MAE, R². SHAP used for explainable AI to interpret feature impact and improve smart city solar energy prediction accuracy.
 
-#### Overview
-This repository contains a complete data science pipeline for forecasting solar power generation using time-series and weather data. The project applies explainable machine learning, including classical models and deep learning, to achieve high-accuracy predictions and interpretable results.[1]
 
-#### Dataset
-- The dataset (`BigML_Dataset_5f50a4cc0d052e40e6000034.csv`) features chronological measurements including temperature, wind, humidity, sky cover, daylight, barometric pressure, and actual solar power generated for each time interval.
-- Feature engineering includes temporal lags, normalization, and encoding for robust forecasting.
-- Target column is “Power Generated,” referenced against multivariate weather and timing data.[2]
+---
 
-#### Code Structure
-- Jupyter/Python notebook and `.py` implementations are provided for full workflow.
-- Main file: Data loading, exploration, preprocessing (imputation, encoding, scaling), feature engineering, chronological splitting, training, evaluation, and visualization.
-- Key models used: Random Forest, Support Vector Regressor, CNN, CNN-LSTM, Seq2Seq Encoder-Decoder LSTM.
-- The code includes implementation of SHAP and LIME for explainable AI, hyperparameter tuning, feature importance, and comparative evaluation.[1]
+# Solar-Power-Generation-Forecasting-in-Smart-Cities ☀️🏙️
 
-#### Workflow Steps
-- Load and explore dataset, visualizing distributions and correlations.
-- Time-series feature creation and handling lags.
-- Data normalization and one-hot encoding of categorical variables.
-- Chronologically safe train/validation/test splits for realistic time-series forecasting.
-- Train and evaluate multiple models including Random Forest, SVR, CNN, CNN-LSTM, and Seq2Seq LSTM.
-- Assess performance with metrics (MSE, RMSE, R^2) and visualize Predictions vs Actuals.
-- Interpret model predictions using explainable AI (SHAP, LIME), partial dependence plots, and feature attribution analyses.
-- Results are visualized across short, medium, and long forecasting horizons.[1]
+[![Python](https://img.shields.io/badge/Python-3.10-blue)](https://www.python.org/)
+[![TensorFlow](https://img.shields.io/badge/TensorFlow-2.15-orange)](https://www.tensorflow.org/)
+[![Keras](https://img.shields.io/badge/Keras-2.15-red)](https://keras.io/)
+[![Scikit-Learn](https://img.shields.io/badge/scikit--learn-1.3.0-green)](https://scikit-learn.org/)
 
-#### Usage Instructions
-1. Clone the repository and ensure all dependencies are installed (Python, pandas, numpy, scikit-learn, matplotlib, seaborn, tensorflow, keras, SHAP, LIME).
-2. Place the dataset file in the working directory.
-3. Run the main code file or notebook (`SolarPower.ipynb` or equivalent).
-4. Follow cells sequentially for: data preparation, feature engineering, model training, validation, performance reporting, and explanation.
-5. Visual results and tables will output key insights on solar power prediction and feature impact.
+Optimized forecasting of **solar power generation in smart cities** using classical and deep learning models, combined with **explainable AI (SHAP & LIME)** to interpret feature impacts and improve predictive accuracy.
 
-#### Requirements
-- Python 3.6+
-- pandas, numpy, scikit-learn, tensorflow, keras, matplotlib, seaborn, SHAP, LIME
-- Jupyter Notebook or compatible IDE
+---
 
-#### Results & Explainability
-- Models are compared by predictive accuracy and interpretability.
-- SHAP and LIME are used to analyze which weather/timing variables most influence solar power output.
-- Visualizations show actual vs predicted power and feature impact, supporting actionable insights for smart city optimization.
+## Project Overview
+
+This project implements a **full data science pipeline** for forecasting solar power generation using **time-series weather data**. The workflow applies classical regression models, deep learning, and explainable AI to deliver **accurate and interpretable predictions**.
+
+**Goal:** Predict solar power output accurately while understanding the influence of environmental and temporal factors.
+
+---
+
+## Dataset
+
+* File: `BigML_Dataset_5f50a4cc0d052e40e6000034.csv`
+* Features include: temperature, wind, humidity, sky cover, daylight, barometric pressure, and actual solar power generated.
+* **Feature Engineering:** Temporal lags, normalization, encoding for robust time-series forecasting.
+* **Target Column:** `Power Generated`
+
+---
+
+## Code Structure
+
+* Jupyter Notebook and Python scripts provide the **complete workflow**:
+
+  * Data loading & exploration
+  * Preprocessing: imputation, encoding, scaling
+  * Feature engineering and chronological splits
+  * Model training, hyperparameter tuning, evaluation
+  * Visualization and explainable AI (SHAP, LIME)
+
+* **Key Models Used:**
+  | Model | Description |
+  |-------|-------------|
+  | Random Forest | Ensemble tree-based regression for robust predictions |
+  | SVR | Support Vector Regression for capturing non-linear trends |
+  | CNN | Convolutional Neural Network for feature extraction from time series |
+  | CNN-LSTM | Hybrid CNN and LSTM for temporal-spatial pattern learning |
+  | Seq2Seq LSTM | Encoder-Decoder LSTM for multi-step time-series forecasting |
+
+---
+
+## Workflow Steps
+
+1. Load dataset and explore distributions, correlations, and missing values.
+2. Create time-series features and handle temporal lags.
+3. Normalize numeric variables and one-hot encode categorical features.
+4. Chronologically split data into train, validation, and test sets.
+5. Train and evaluate models: Random Forest, SVR, CNN, CNN-LSTM, Seq2Seq LSTM.
+6. Assess performance with **MSE, RMSE, MAE, R²**.
+7. Interpret model predictions using **SHAP & LIME**, including partial dependence and feature attribution plots.
+8. Visualize predictions for short-, medium-, and long-term forecasting horizons.
+
+---
+
+## Evaluation Metrics
+
+| Metric | Description                                                            |
+| ------ | ---------------------------------------------------------------------- |
+| MSE    | Mean Squared Error, measures average squared prediction error          |
+| RMSE   | Root Mean Squared Error, penalizes larger errors                       |
+| MAE    | Mean Absolute Error, measures average absolute prediction error        |
+| R²     | Coefficient of determination, measures variance explained by the model |
+
+---
+
+## Results & Explainability
+
+* Compare predictive accuracy and interpretability across models.
+* **SHAP & LIME** reveal which weather/timing features most influence solar power output.
+* Visualizations include:
+
+  * Predicted vs Actual Solar Power
+  * Feature importance and impact plots
+* Supports **actionable insights** for smart city energy management.
+
+**Sample Visualization:**
+*(Add plots here using Markdown: `![Predicted vs Actual](path_to_plot.png)`)*
+
+---
+
+## Installation & Usage
+
+```bash
+git clone https://github.com/your-username/Solar-Power-Generation-Forecasting-in-Smart-Cities.git
+cd Solar-Power-Generation-Forecasting-in-Smart-Cities
+pip install -r requirements.txt
+jupyter notebook SolarPower.ipynb
+```
+
+* Follow notebook cells for **data preparation, feature engineering, model training, validation, evaluation, and explanation**.
+
+---
+
+## Requirements
+
+* Python 3.6+
+* pandas, numpy, scikit-learn, tensorflow, keras, matplotlib, seaborn, SHAP, LIME
+* Jupyter Notebook or compatible IDE
+
+---
+
+## Contributing
+
+Contributions are welcome! Open issues or submit pull requests to improve models, visualizations, or explanation techniques.
+
+---
+
