@@ -1,1 +1,1162 @@
+#Forecasting Solar Power Generation in Smart Cities Using Explainable AI
+
+mount the drive
+from google.colab import drive
+drive.mount('/content/drive')
+import libraries
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+import sklearn
+from sklearn.preprocessing import MinMaxScaler, StandardScaler
+
+import tensorflow as tf
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense, Dropout, Activation
+from keras import optimizers
+
+import warnings
+warnings.filterwarnings('ignore')
+Load the dataset
+solar = pd.read_csv('/content/drive/MyDrive/Colab Notebooks/Bind-up_code/5. Solar power/dataset/BigML_Dataset_5f50a4cc0d052e40e6000034.csv')
+solar.head()
+solar.shape
+solar.dtypes
+solar.info()
+solar.describe()
+solar.isnull().sum()
+# Histograms for numerical features
+# Histograms for numerical features
+solar.hist(figsize=(15, 10))
+plt.tight_layout()
+plt.show()
+# Pairplot for selected features
+# Pairplot for selected features (consider a subset due to the number of features)
+sns.pairplot(solar[['Average Temperature (Day)', 'Relative Humidity', 'Power Generated']])
+plt.show()
+
+# Correlation matrix heatmap
+
+# Correlation matrix heatmap
+plt.figure(figsize=(10, 8))
+sns.heatmap(solar.corr(), annot=True, cmap='coolwarm', fmt=".2f")
+plt.title('Correlation Matrix')
+plt.show()
+
+Drop the irrelevant coloumns
+solar.drop(columns={'Day of Year', 'Year', 'Month', 'Day', 'Visibility', 'Average Wind Speed (Period)'}, inplace=True)
+solar['Power Generated'] = solar['Power Generated'] / 10000
+Feature Engineering: Creation of Lag Variables
+# Feature Engineering: Creation of Lag Variables
+features_time = ['Average Temperature (Day)', 'Average Wind Direction (Day)',
+                 'Average Wind Speed (Day)', 'Relative Humidity',
+                 'Average Barometric Pressure (Period)', 'Power Generated']
+
+lag_name = ['lag_temp', 'lag_wdirection', 'lag_wspeed',
+            'lag_humidity', 'lag_pressure', 'lag_Power']
+
+target = 'Power Generated'
+
+Function to create lagged dataset
+for feat, lag_feat in zip(features_time, lag_name):
+    solar[lag_feat] = solar[feat].shift(1)
+# Drop NaN caused by lagging
+solar = solar.dropna().reset_index(drop=True)
+# Define features (X) and target (y)
+
+# --- Define Features and Target ---
+X = solar.drop(columns=[target])  # predictors
+y = solar[target]
+Encoding
+# Apply one-hot encoding to the 'Is Daylight' column if it exists
+if 'Is Daylight' in X.columns:
+    X = pd.get_dummies(X, columns=['Is Daylight'], drop_first=True)
+    print("One-hot encoding applied to 'Is Daylight'")
+else:
+    print("'Is Daylight' not found in features")
+    display(X.head()) # Display X to show its current state
+Scale the data
+from sklearn.preprocessing import MinMaxScaler
+
+# --- Feature Scaling ---
+scaler = MinMaxScaler()
+numeric_cols = X.select_dtypes(include=np.number).columns.tolist()
+X[numeric_cols] = scaler.fit_transform(X[numeric_cols])
+
+
+# Display the first few rows of the scaled DataFrame
+display(X.head())
+Split the dataset
+
+# --- Chronological Splitting (Time-series safe) ---
+train_size = 0.7
+val_size = 0.15
+
+n = len(solar)
+train_end = int(n * train_size)
+val_end = int(n * (train_size + val_size))
+
+X_train, y_train = X[:train_end], y[:train_end]
+X_val, y_val = X[train_end:val_end], y[train_end:val_end]
+X_test, y_test = X[val_end:], y[val_end:]
+
+print("Training set shape:", X_train.shape)
+print("Validation set shape:", X_val.shape)
+print("Test set shape:", X_test.shape)
+#Random Forest Regressor
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.metrics import mean_squared_error, r2_score
+
+# ====================================================
+# 9. Train Random Forest Regressor
+# ====================================================
+rf_model = RandomForestRegressor(
+    n_estimators=200,
+    random_state=42,
+    oob_score=True,
+    n_jobs=-1
+)
+
+# Train the model on the training data
+rf_model.fit(X_train, y_train)
+
+# ====================================================
+# 10. Evaluation on Validation Set
+# ====================================================
+y_val_pred = rf_model.predict(X_val)
+
+mse_val = mean_squared_error(y_val, y_val_pred)
+rmse_val = np.sqrt(mse_val)
+r2_val = r2_score(y_val, y_val_pred)
+
+print("Validation Set Evaluation:")
+print(f"Mean Squared Error (MSE): {mse_val:.4f}")
+print(f"Root Mean Squared Error (RMSE): {rmse_val:.4f}")
+print(f"R-squared (R2): {r2_val:.4f}")
+
+
+# ====================================================
+# 11. Evaluation on Test Set
+# ====================================================
+y_test_pred = rf_model.predict(X_test)
+
+mse_test = mean_squared_error(y_test, y_test_pred)
+rmse_test = np.sqrt(mse_test)
+r2_test = r2_score(y_test, y_test_pred)
+
+print("\nTest Set Evaluation:")
+print(f"Mean Squared Error (MSE): {mse_test:.4f}")
+print(f"Root Mean Squared Error (RMSE): {rmse_test:.4f}")
+print(f"R-squared (R2): {r2_test:.4f}")
+
+# Predicted vs Actual Plot
+plt.figure(figsize=(7,6))
+plt.scatter(y_test, y_test_pred, alpha=0.6, edgecolor='k')
+plt.plot([y_test.min(), y_test.max()], [y_test.min(), y_test.max()], 'r--')
+plt.xlabel("Actual Power Generated")
+plt.ylabel("Predicted Power Generated")
+plt.title("Actual vs Predicted - Random Forest Regressor")
+plt.tight_layout()
+plt.show()
+# Support Vector Regression
+# ==========================
+# Support Vector Regression
+# ==========================
+
+from sklearn.svm import SVR
+from sklearn.impute import SimpleImputer # Import SimpleImputer
+
+
+# Initialize SVR model
+svr_model = SVR(
+    kernel='rbf',      # Radial Basis Function kernel
+    C=10,              # Regularization parameter
+    epsilon=0.01,      # Epsilon in the epsilon-SVR model
+    gamma='scale'      # Kernel coefficient
+)
+
+# 📌 Handle missing values before training SVR
+# Use SimpleImputer to fill NaN values with the mean (or another strategy)
+# For simplicity, we'll use the same fillna(0) strategy as the CNN/CNN-LSTM
+X_train_imputed = X_train.fillna(0)
+X_val_imputed = X_val.fillna(0)
+X_test_imputed = X_test.fillna(0)
+
+
+# Train SVR model on imputed data
+svr_model.fit(X_train_imputed, y_train)
+
+# ====================================================
+# Evaluation on Validation Set
+# ====================================================
+y_val_pred_svr = svr_model.predict(X_val_imputed)
+
+mse_val_svr = mean_squared_error(y_val, y_val_pred_svr)
+rmse_val_svr = np.sqrt(mse_val_svr)
+r2_val_svr = r2_score(y_val, y_val_pred_svr)
+
+print("Validation Set Evaluation - SVR:")
+print(f"Mean Squared Error (MSE): {mse_val_svr:.4f}")
+print(f"Root Mean Squared Error (RMSE): {rmse_val_svr:.4f}")
+print(f"R-squared (R2): {r2_val_svr:.4f}")
+
+# ====================================================
+# Evaluation on Test Set
+# ====================================================
+y_test_pred_svr = svr_model.predict(X_test_imputed)
+
+mse_test_svr = mean_squared_error(y_test, y_test_pred_svr)
+rmse_test_svr = np.sqrt(mse_test_svr)
+r2_test_svr = r2_score(y_test, y_test_pred_svr)
+
+print("\nTest Set Evaluation - SVR:")
+print(f"Mean Squared Error (MSE): {mse_test_svr:.4f}")
+print(f"Root Mean Squared Error (RMSE): {rmse_test_svr:.4f}")
+print(f"R-squared (R2): {r2_test_svr:.4f}")
+
+# ====================================================
+# Predicted vs Actual Plot
+# ====================================================
+plt.figure(figsize=(7,6))
+plt.scatter(y_test, y_test_pred_svr, alpha=0.6, edgecolor='k')
+plt.plot([y_test.min(), y_test.max()], [y_test.min(), y_test.max()], 'r--')
+plt.xlabel("Actual Power Generated")
+plt.ylabel("Predicted Power Generated")
+plt.title("Actual vs Predicted - Support Vector Regressor")
+plt.tight_layout()
+plt.show()
+CNN
+# =========================
+# 1️⃣ Ensure all features are numeric and handle missing values
+# =========================
+X_train = X_train.apply(pd.to_numeric, errors='coerce').fillna(0).astype('float32')
+X_val   = X_val.apply(pd.to_numeric, errors='coerce').fillna(0).astype('float32')
+X_test  = X_test.apply(pd.to_numeric, errors='coerce').fillna(0).astype('float32')
+
+# Convert targets to float32 (they might already be numpy arrays)
+y_train = np.array(y_train, dtype='float32')
+y_val   = np.array(y_val, dtype='float32')
+y_test  = np.array(y_test, dtype='float32')
+
+# =========================
+# 2️⃣ Reshape features for CNN (samples, timesteps=1, features)
+# =========================
+X_train_cnn = X_train.values.reshape((X_train.shape[0], 1, X_train.shape[1]))
+X_val_cnn   = X_val.values.reshape((X_val.shape[0], 1, X_val.shape[1]))
+X_test_cnn  = X_test.values.reshape((X_test.shape[0], 1, X_test.shape[1]))
+
+# =========================
+# 3️⃣ Define CNN model
+# =========================
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Conv1D, MaxPooling1D, Flatten, Dense, Dropout
+from tensorflow.keras.optimizers import Adam
+
+cnn_model = Sequential([
+    Conv1D(filters=64, kernel_size=1, activation='relu', input_shape=(1, X_train.shape[1])),
+    MaxPooling1D(pool_size=1),
+    Dropout(0.2),
+    Conv1D(filters=32, kernel_size=1, activation='relu'),
+    MaxPooling1D(pool_size=1),
+    Flatten(),
+    Dense(64, activation='relu'),
+    Dense(1)  # Regression output
+])
+
+cnn_model.compile(optimizer=Adam(learning_rate=0.001), loss='mse', metrics=['mae'])
+
+# =========================
+# 4️⃣ Train CNN model
+# =========================
+history = cnn_model.fit(
+    X_train_cnn, y_train,
+    validation_data=(X_val_cnn, y_val),
+    epochs=50,
+    batch_size=32,
+    verbose=1
+)
+
+# =========================
+# 5️⃣ Evaluate on Test Set
+# =========================
+y_test_pred = cnn_model.predict(X_test_cnn)
+
+from sklearn.metrics import mean_squared_error, r2_score
+import numpy as np
+
+mse_test = mean_squared_error(y_test, y_test_pred)
+rmse_test = np.sqrt(mse_test)
+r2_test = r2_score(y_test, y_test_pred)
+
+print("\nTest Set Evaluation:")
+print(f"Mean Squared Error (MSE): {mse_test:.4f}")
+print(f"Root Mean Squared Error (RMSE): {rmse_test:.4f}")
+print(f"R-squared (R2): {r2_test:.4f}")
+
+# =========================
+# 6️⃣ Plot Predicted vs Actual
+# =========================
+import matplotlib.pyplot as plt
+
+plt.figure(figsize=(7,6))
+plt.scatter(y_test, y_test_pred, alpha=0.6, edgecolor='k')
+plt.plot([y_test.min(), y_test.max()], [y_test.min(), y_test.max()], 'r--')
+plt.xlabel("Actual Power Generated")
+plt.ylabel("Predicted Power Generated")
+plt.title("Actual vs Predicted - CNN Regressor")
+plt.tight_layout()
+plt.show()
+
+CNN + LSTM
+# =========================
+# 0️⃣ Imports
+# =========================
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.metrics import mean_squared_error, r2_score
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Conv1D, MaxPooling1D, LSTM, Dense, Dropout
+from tensorflow.keras.optimizers import Adam
+
+# =========================
+# 1️⃣ Ensure numeric data
+# =========================
+# If your X_train, X_val, X_test are DataFrames, convert to float32
+if isinstance(X_train, pd.DataFrame):
+    X_train = X_train.to_numpy().astype('float32')
+    X_val   = X_val.to_numpy().astype('float32')
+    X_test  = X_test.to_numpy().astype('float32')
+else:
+    X_train = X_train.astype('float32')
+    X_val   = X_val.astype('float32')
+    X_test  = X_test.astype('float32')
+
+y_train = y_train.astype('float32')
+y_val   = y_val.astype('float32')
+y_test  = y_test.astype('float32')
+
+# =========================
+# 2️⃣ Scale features
+# =========================
+scaler = MinMaxScaler()
+X_train = scaler.fit_transform(X_train)
+X_val   = scaler.transform(X_val)
+X_test  = scaler.transform(X_test)
+
+# =========================
+# 3️⃣ Reshape for CNN-LSTM
+# =========================
+# CNN-LSTM expects 3D input: (samples, timesteps, features)
+X_train_cnnlstm = X_train.reshape((X_train.shape[0], 1, X_train.shape[1]))
+X_val_cnnlstm   = X_val.reshape((X_val.shape[0], 1, X_val.shape[1]))
+X_test_cnnlstm  = X_test.reshape((X_test.shape[0], 1, X_test.shape[1]))
+
+# =========================
+# 4️⃣ Define CNN-LSTM model
+# =========================
+cnn_lstm_model = Sequential([
+    Conv1D(filters=128, kernel_size=1, activation='relu', input_shape=(1, X_train.shape[1])),
+    Dropout(0.3),
+    LSTM(128, return_sequences=False),
+    Dropout(0.3),
+    Dense(64, activation='relu'),
+    Dense(1)  # Regression output
+])
+
+cnn_lstm_model.compile(
+    optimizer=Adam(learning_rate=0.0005),
+    loss='mse',
+    metrics=['mae']
+)
+
+cnn_lstm_model.summary()
+
+# =========================
+# 5️⃣ Train the model
+# =========================
+history = cnn_lstm_model.fit(
+    X_train_cnnlstm, y_train,
+    validation_data=(X_val_cnnlstm, y_val),
+    epochs=100,
+    batch_size=16,
+    verbose=1
+)
+
+# =========================
+# 6️⃣ Evaluate on Test Set
+# =========================
+y_test_pred = cnn_lstm_model.predict(X_test_cnnlstm)
+
+mse_test = mean_squared_error(y_test, y_test_pred)
+rmse_test = np.sqrt(mse_test)
+r2_test = r2_score(y_test, y_test_pred)
+
+print("\nTest Set Evaluation:")
+print(f"MSE: {mse_test:.6f}")
+print(f"RMSE: {rmse_test:.6f}")
+print(f"R²: {r2_test:.6f}")
+
+# =========================
+# 7️⃣ Training & Validation Curves
+# =========================
+plt.figure(figsize=(12,5))
+
+# Loss
+plt.subplot(1,2,1)
+plt.plot(history.history['loss'], label='Train Loss (MSE)')
+plt.plot(history.history['val_loss'], label='Val Loss (MSE)')
+plt.title('Training vs Validation Loss')
+plt.xlabel('Epochs')
+plt.ylabel('MSE')
+plt.legend()
+
+# MAE
+plt.subplot(1,2,2)
+plt.plot(history.history['mae'], label='Train MAE')
+plt.plot(history.history['val_mae'], label='Val MAE')
+plt.title('Training vs Validation MAE')
+plt.xlabel('Epochs')
+plt.ylabel('MAE')
+plt.legend()
+
+plt.tight_layout()
+plt.show()
+
+#Seq2Seq (Encoder–Decoder LSTM)
+
+
+import tensorflow as tf
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import LSTM, Dense, Dropout, RepeatVector, TimeDistributed
+from tensorflow.keras.optimizers import Adam
+# =========================
+# 8️⃣ Create Sequences for Seq2Seq
+# =========================
+INPUT_SEQ_LEN = 10
+OUTPUT_SEQ_LEN = 1
+
+def create_sequences(X, y, input_len, output_len):
+    X_seq, y_seq = [], []
+    for i in range(len(X) - input_len - output_len + 1):
+        # If X is DataFrame, use .values; if already numpy, just slice
+        X_seq.append(X[i:i+input_len].values if isinstance(X, pd.DataFrame) else X[i:i+input_len])
+        y_seq.append(y[i+input_len:i+input_len+output_len])  # y is already np.array
+    return np.array(X_seq), np.array(y_seq)
+
+# Convert y to numpy arrays if not already
+y_train_np = y_train.values if isinstance(y_train, pd.Series) else y_train
+y_val_np   = y_val.values   if isinstance(y_val, pd.Series) else y_val
+y_test_np  = y_test.values  if isinstance(y_test, pd.Series) else y_test
+
+# Create sequences
+X_train_seq, y_train_seq = create_sequences(X_train, y_train_np, INPUT_SEQ_LEN, OUTPUT_SEQ_LEN)
+X_val_seq, y_val_seq     = create_sequences(X_val, y_val_np, INPUT_SEQ_LEN, OUTPUT_SEQ_LEN)
+X_test_seq, y_test_seq   = create_sequences(X_test, y_test_np, INPUT_SEQ_LEN, OUTPUT_SEQ_LEN)
+
+print("X_train_seq shape:", X_train_seq.shape)
+print("y_train_seq shape:", y_train_seq.shape)
+
+# =========================
+# 9️⃣ Seq2Seq Model
+# =========================
+seq2seq_model = Sequential([
+    LSTM(128, activation='relu', input_shape=(INPUT_SEQ_LEN, X_train_seq.shape[2])),
+    RepeatVector(OUTPUT_SEQ_LEN),
+    LSTM(128, activation='relu', return_sequences=True),
+    TimeDistributed(Dense(64, activation='relu')),
+    TimeDistributed(Dense(1))
+])
+
+seq2seq_model.compile(optimizer=Adam(learning_rate=0.001), loss='mse', metrics=['mae'])
+seq2seq_model.summary()
+
+# =========================
+# 10️⃣ Train Seq2Seq Model
+# =========================
+history = seq2seq_model.fit(
+    X_train_seq, y_train_seq,
+    validation_data=(X_val_seq, y_val_seq),
+    epochs=50,
+    batch_size=32,
+    verbose=1
+)
+
+
+# =========================
+# 11️⃣ Evaluate Seq2Seq Model
+# =========================
+y_test_pred_seq = seq2seq_model.predict(X_test_seq)
+mse_test = mean_squared_error(y_test_seq.flatten(), y_test_pred_seq.flatten())
+rmse_test = np.sqrt(mse_test)
+r2_test = r2_score(y_test_seq.flatten(), y_test_pred_seq.flatten())
+print("\nTest Set Evaluation - Seq2Seq:")
+print(f"MSE: {mse_test:.4f}, RMSE: {rmse_test:.4f}, R2: {r2_test:.4f}")
+
+y_val_pred_seq = seq2seq_model.predict(X_val_seq)
+mse_val = mean_squared_error(y_val_seq.flatten(), y_val_pred_seq.flatten())
+rmse_val = np.sqrt(mse_val)
+r2_val = r2_score(y_val_seq.flatten(), y_val_pred_seq.flatten())
+print("\nValidation Set Evaluation - Seq2Seq:")
+print(f"MSE: {mse_val:.4f}, RMSE: {rmse_val:.4f}, R2: {r2_val:.4f}")
+
+# =========================
+# 12️⃣ Plot Training & Validation Loss
+# =========================
+plt.figure(figsize=(12,5))
+plt.plot(history.history['loss'], label='Train Loss (MSE)')
+plt.plot(history.history['val_loss'], label='Validation Loss (MSE)')
+plt.title("Seq2Seq Training vs Validation Loss")
+plt.xlabel("Epochs")
+plt.ylabel("MSE Loss")
+plt.legend()
+plt.show()
+Comparion table of all models
+# Create a dictionary to store the evaluation metrics
+model_performance = {
+    'Random Forest': {
+        'MSE': mse_test, # This mse_test is from the last RF run
+        'RMSE': rmse_test, # This rmse_test is from the last RF run
+        'R2': r2_test # This r2_test is from the last RF run
+    },
+    'Support Vector Regression': {
+        'MSE': mse_test_svr,
+        'RMSE': rmse_test_svr,
+        'R2': r2_test_svr
+    },
+    'CNN': {
+        'MSE': 0.0920, # From the output of cell IRgSTb4BiIih
+        'RMSE': 0.3033, # From the output of cell IRgSTb4BiIih
+        'R2': 0.9361 # From the output of cell IRgSTb4BiIih
+    },
+    'CNN-LSTM': {
+        'MSE': 0.0954, # From the output of cell WJ0H-C_DkViL
+        'RMSE': 0.3089, # From the output of cell WJ0H-C_DkViL
+        'R2': 0.9337 # From the output of cell WJ0H-C_DkViL
+    },
+     'Seq2Seq (Encoder–Decoder LSTM)': {
+        'MSE': mse_test, # This mse_test is from the last Seq2Seq run
+        'RMSE': rmse_test, # This rmse_test is from the last Seq2Seq run
+        'R2': r2_test # This r2_test is from the last Seq2Seq run
+    }
+}
+
+# Create a pandas DataFrame from the dictionary
+performance_df = pd.DataFrame.from_dict(model_performance, orient='index')
+
+# Display the table
+print("Model Performance Comparison on Test Set:")
+display(performance_df)
+Visualization of Model Predictions Across Multiple Horizons
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+sns.set()
+
+# -------------------------
+# Parameters
+# -------------------------
+n = 0  # index of test-set to visualize
+short_horizon = 56
+medium_horizon = 120
+long_horizon = 240
+
+# -------------------------
+# Helper: safe convert to pd.Series
+# -------------------------
+def to_series(x):
+    if x is None:
+        return None
+    if isinstance(x, pd.Series):
+        return x.reset_index(drop=True)
+    if isinstance(x, pd.DataFrame) and x.shape[1] == 1:
+        return x.iloc[:, 0].reset_index(drop=True)
+    return pd.Series(np.asarray(x).ravel()).reset_index(drop=True)
+
+# -------------------------
+# Prepare test set
+# -------------------------
+y_test_set = [y_test]
+y_test_set = [to_series(y) for y in y_test_set]
+
+# -------------------------
+# Prepare model predictions
+# -------------------------
+rf_pred = rf_model.predict(X_test) if 'rf_model' in globals() else None
+svr_pred = svr_model.predict(X_test_imputed) if 'svr_model' in globals() else None
+cnn_pred = cnn_model.predict(X_test_cnn) if 'cnn_model' in globals() else None
+cnn_lstm_pred = cnn_lstm_model.predict(X_test_cnnlstm) if 'cnn_lstm_model' in globals() else None
+seq2seq_pred = seq2seq_model.predict(X_test_seq).flatten() if 'seq2seq_model' in globals() else None
+
+pred_vars = {
+    'Random Forest': rf_pred,
+    'Support Vector Regression': svr_pred,
+    'CNN': cnn_pred,
+    'CNN-LSTM': cnn_lstm_pred,
+    'Seq2Seq (Encoder–Decoder LSTM)': seq2seq_pred
+}
+
+pred_series = {}
+for name, container in pred_vars.items():
+    if container is None:
+        continue
+    pred_series[name] = [to_series(container)]
+
+def get_pred(name, idx):
+    if name not in pred_series: return None
+    if idx >= len(pred_series[name]): return None
+    return pred_series[name][idx]
+
+# -------------------------
+# Plot Overall
+# -------------------------
+plt.figure(figsize=(12,6))
+y_true = y_test_set[n]
+plt.plot(y_true, label='True', linewidth=2, color='black')
+for name in pred_series.keys():
+    pred = get_pred(name, n)
+    if pred is not None:
+        L = min(len(y_true), len(pred))
+        plt.plot(pred.iloc[:L], label=name, alpha=0.9)
+plt.title(f'Overall: Models vs True — Test set {n}', fontsize=14)
+plt.xlabel('Time index')
+plt.ylabel('Power')
+plt.legend()
+plt.show()
+
+# -------------------------
+# Plot Short Horizon
+# -------------------------
+plt.figure(figsize=(12,6))
+L_short = min(short_horizon, len(y_true))
+plt.plot(y_true.iloc[:L_short], label='True', linewidth=2, color='black')
+for name in pred_series.keys():
+    pred = get_pred(name, n)
+    if pred is not None:
+        plt.plot(pred.iloc[:L_short], label=name, alpha=0.9)
+plt.title(f'Short Horizon (first {L_short})', fontsize=14)
+plt.xlabel('Time index')
+plt.ylabel('Power')
+plt.legend()
+plt.show()
+
+# -------------------------
+# Plot Medium Horizon
+# -------------------------
+plt.figure(figsize=(12,6))
+L_med = min(medium_horizon, len(y_true))
+plt.plot(y_true.iloc[:L_med], label='True', linewidth=2, color='black')
+for name in pred_series.keys():
+    pred = get_pred(name, n)
+    if pred is not None:
+        plt.plot(pred.iloc[:L_med], label=name, alpha=0.9)
+plt.title(f'Medium Horizon (first {L_med})', fontsize=14)
+plt.xlabel('Time index')
+plt.ylabel('Power')
+plt.legend()
+plt.show()
+# -------------------------
+# Plot Long Horizon
+# -------------------------
+plt.figure(figsize=(12,6))
+L_long = min(long_horizon, len(y_true))
+plt.plot(y_true.iloc[:L_long], label='True', linewidth=2, color='black')
+for name in pred_series.keys():
+    pred = get_pred(name, n)
+    if pred is not None:
+        plt.plot(pred.iloc[:L_long], label=name, alpha=0.9)
+plt.title(f'Long Horizon (first {L_long})', fontsize=14)
+plt.xlabel('Time index')
+plt.ylabel('Power')
+plt.legend()
+plt.show()
+#Hyperparameter Tuning
+Hyperparameter tuning in random forest  and SVR
+from sklearn.model_selection import RandomizedSearchCV
+from sklearn.metrics import mean_squared_error, r2_score
+from scipy.stats import randint, uniform
+
+# Define models and their hyperparameter grids
+ml_models = {
+    'RandomForest': {
+        'model': RandomForestRegressor(random_state=42),
+        'params': {
+            'n_estimators': randint(100, 500),
+            'max_depth': randint(3, 20),
+            'min_samples_split': randint(2, 10),
+            'min_samples_leaf': randint(1, 10),
+            'max_features': ['auto', 'sqrt', 'log2']
+        }
+    },
+    'SVR': {
+        'model': SVR(kernel='rbf'),
+        'params': {
+            'C': uniform(0.1, 100),
+            'epsilon': uniform(0.01, 1.0),
+            'gamma': ['scale', 'auto']
+        }
+    }
+}
+
+ml_results = {}
+
+for name, m in ml_models.items():
+    print(f"\n--- Tuning {name} ---")
+    search = RandomizedSearchCV(
+        estimator=m['model'],
+        param_distributions=m['params'],
+        n_iter=20,
+        cv=3,
+        n_jobs=-1,
+        verbose=2,
+        scoring='r2',
+        random_state=42
+    )
+    search.fit(X_train, y_train)
+
+    best_model = search.best_estimator_
+    y_pred = best_model.predict(X_test)
+
+    mse = mean_squared_error(y_test, y_pred)
+    rmse = np.sqrt(mse)
+    r2 = r2_score(y_test, y_pred)
+
+    ml_results[name] = {
+        'best_params': search.best_params_,
+        'MSE': mse,
+        'RMSE': rmse,
+        'R2': r2
+    }
+
+# Show results
+import pandas as pd
+display(pd.DataFrame(ml_results).T)
+
+hyperparameter tuning in 'CNN', 'CNN-LSTM',  'Seq2Seq'
+!pip install keras-tuner --quiet
+from kerastuner.tuners import RandomSearch
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense, Dropout, Conv1D, MaxPooling1D, LSTM, GRU, Bidirectional, RepeatVector, TimeDistributed
+from tensorflow.keras.optimizers import Adam
+
+dl_models = ['CNN', 'CNN-LSTM', 'Seq2Seq']
+dl_results = {}
+
+def build_model(name, hp, input_shape):
+    model = Sequential()
+
+    if name == 'CNN':
+        model.add(Conv1D(filters=hp.Int('filters',32,128,32), kernel_size=1, activation='relu', input_shape=input_shape))
+        model.add(MaxPooling1D(1))
+        model.add(Dropout(hp.Float('dropout',0.1,0.5,0.1)))
+        model.add(Flatten())
+        model.add(Dense(hp.Int('dense_units',32,128,32), activation='relu'))
+        model.add(Dense(1))
+
+    elif name == 'CNN-LSTM':
+        model.add(Conv1D(filters=hp.Int('filters',32,128,32), kernel_size=1, activation='relu', input_shape=input_shape))
+        model.add(MaxPooling1D(1))
+        model.add(Dropout(hp.Float('dropout',0.1,0.5,0.1)))
+        model.add(LSTM(hp.Int('lstm_units',32,128,32)))
+        model.add(Dense(hp.Int('dense_units',32,128,32), activation='relu'))
+        model.add(Dense(1))
+
+    elif name == 'Seq2Seq':
+        seq_len, features = input_shape
+        model.add(LSTM(hp.Int('lstm_units',32,128,32), activation='relu', input_shape=input_shape))
+        model.add(RepeatVector(1))
+        model.add(LSTM(hp.Int('lstm_units2',32,128,32), activation='relu', return_sequences=True))
+        model.add(TimeDistributed(Dense(hp.Int('dense_units',32,128,32), activation='relu')))
+        model.add(TimeDistributed(Dense(1)))
+
+    model.compile(optimizer=Adam(hp.Float('lr',1e-4,1e-2, sampling='log')),
+                  loss='mse',
+                  metrics=['mae'])
+    return model
+
+# Loop for DL models
+for name in dl_models:
+    print(f"\n--- Tuning {name} ---")
+    if name in ['CNN', 'CNN-LSTM']:
+        input_shape = (X_train_cnn.shape[1], X_train_cnn.shape[2])
+        X_train_dl, X_val_dl = X_train_cnn, X_val_cnn
+        y_train_dl, y_val_dl = y_train, y_val
+    else:  # Seq2Seq
+        input_shape = (X_train_seq.shape[1], X_train_seq.shape[2])
+        X_train_dl, X_val_dl = X_train_seq, X_val_seq
+        y_train_dl, y_val_dl = y_train_seq, y_val_seq
+
+    tuner = RandomSearch(
+        lambda hp: build_model(name, hp, input_shape),
+        objective='val_loss',
+        max_trials=1,
+        executions_per_trial=1,
+        directory='dl_tuning',
+        project_name=name
+    )
+
+    tuner.search(X_train_dl, y_train_dl, validation_data=(X_val_dl, y_val_dl), epochs=30, batch_size=32, verbose=1)
+
+    best_model = tuner.get_best_models(num_models=1)[0]
+
+    y_pred = best_model.predict(X_test_cnn if name != 'Seq2Seq' else X_test_seq)
+
+    mse = mean_squared_error(y_test if name != 'Seq2Seq' else y_test_seq.flatten(),
+                             y_pred.flatten() if name == 'Seq2Seq' else y_pred)
+    rmse = np.sqrt(mse)
+    r2 = r2_score(y_test if name != 'Seq2Seq' else y_test_seq.flatten(),
+                  y_pred.flatten() if name == 'Seq2Seq' else y_pred)
+
+    dl_results[name] = {'MSE': mse, 'RMSE': rmse, 'R2': r2}
+
+# Display DL results
+display(pd.DataFrame(dl_results).T)
+
+
+Comparison plots of before and after apply hyperparameter
+import matplotlib.pyplot as plt
+import seaborn as sns
+import pandas as pd
+
+# Combine R2 results of ML and DL models
+# Replace these values with your actual results from the final evaluation
+r2_before_tuning = {
+    'Random Forest': r2_test,        # from initial RF
+    'SVR': r2_test_svr,              # from initial SVR
+    'CNN': 0.9361,                   # from initial CNN
+    'CNN-LSTM': 0.9337,              # from initial CNN-LSTM
+    'Seq2Seq': r2_test                # from initial Seq2Seq
+}
+
+r2_after_tuning = {
+    'Random Forest': ml_results['RandomForest']['R2'],  # after RF tuning
+    'SVR': ml_results['SVR']['R2'],                     # after SVR tuning
+    'CNN': dl_results['CNN']['R2'],                     # after CNN tuning
+    'CNN-LSTM': dl_results['CNN-LSTM']['R2'],           # after CNN-LSTM tuning
+    'Seq2Seq': dl_results['Seq2Seq']['R2']             # after Seq2Seq tuning
+}
+
+# Create DataFrame for plotting
+r2_df = pd.DataFrame({
+    'Model': list(r2_before_tuning.keys()),
+    'Original': list(r2_before_tuning.values()),
+    'Tuned': list(r2_after_tuning.values())
+})
+
+# Melt for Seaborn
+r2_df_melt = r2_df.melt(id_vars='Model', var_name='Tuning', value_name='R2')
+
+# Plot
+plt.figure(figsize=(10,6))
+ax = sns.barplot(x='Model', y='R2', hue='Tuning', data=r2_df_melt, palette='viridis')
+
+# Add R2 values on top of each bar
+for p in ax.patches:
+    height = p.get_height()
+    ax.annotate(f'{height:.3f}',
+                (p.get_x() + p.get_width() / 2., height),
+                ha='center', va='bottom', fontsize=10, color='black')
+
+plt.title("R² Comparison Before vs After Hyperparameter Tuning")
+plt.ylabel("R² Score")
+plt.ylim(0, 1.05)
+plt.xticks(rotation=45)
+plt.legend(title='Tuning Status')
+plt.tight_layout()
+plt.show()
+
+Ablation study
+import tensorflow as tf
+tf.keras.backend.clear_session()
+
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from sklearn.metrics import mean_squared_error, r2_score
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense, LSTM, Conv1D, MaxPooling1D
+
+# ---------------------------
+# Model builders
+# ---------------------------
+def build_cnn_lstm(input_shape):
+    kernel_size = 2 if input_shape[0] >= 2 else 1
+    model = Sequential()
+    model.add(Conv1D(filters=64, kernel_size=kernel_size, activation="relu", input_shape=input_shape))
+    if input_shape[0] >= 2:
+        model.add(MaxPooling1D(pool_size=2))
+    model.add(LSTM(64, activation="relu"))
+    model.add(Dense(50, activation="relu"))
+    model.add(Dense(1))
+    return model
+
+def build_lstm_only(input_shape):
+    model = Sequential()
+    model.add(LSTM(64, activation="relu", input_shape=input_shape))
+    model.add(Dense(1))
+    return model
+
+def build_cnn_only(input_shape):
+    kernel_size = 2 if input_shape[0] >= 2 else 1
+    model = Sequential()
+    model.add(Conv1D(filters=64, kernel_size=kernel_size, activation="relu", input_shape=input_shape))
+    model.add(Dense(50, activation="relu"))
+    model.add(Dense(1))
+    return model
+
+# ---------------------------
+# Create sequences for ablation
+# ---------------------------
+def create_sequences(X, y, seq_len):
+    Xs, ys = [], []
+    for i in range(len(X) - seq_len):
+        Xs.append(X[i:(i+seq_len)])
+        ys.append(y[i+seq_len])
+    return np.array(Xs), np.array(ys)
+
+# ---------------------------
+# Ensure numpy arrays
+# ---------------------------
+for var in ["X_train", "X_val", "X_test", "y_train", "y_val", "y_test"]:
+    if isinstance(globals()[var], (pd.DataFrame, pd.Series)):
+        globals()[var] = globals()[var].to_numpy()
+
+# ---------------------------
+# Ablation Study
+# ---------------------------
+ablation_results = []
+
+# 1. Feature Ablation
+features_to_remove = ["Temperature", "Humidity", "Wind Speed"]
+for feature in features_to_remove:
+    print(f"\n[Ablation: Removing {feature}]")
+    try:
+        idx = X_train_columns.index(feature)
+        X_train_ab = np.delete(X_train, idx, axis=1)
+        X_val_ab = np.delete(X_val, idx, axis=1)
+        X_test_ab = np.delete(X_test, idx, axis=1)
+    except:
+        X_train_ab, X_val_ab, X_test_ab = X_train.copy(), X_val.copy(), X_test.copy()
+
+    # reshape to (samples, timesteps=1, features)
+    X_train_ab = X_train_ab.reshape((X_train_ab.shape[0], 1, X_train_ab.shape[1]))
+    X_val_ab = X_val_ab.reshape((X_val_ab.shape[0], 1, X_val_ab.shape[1]))
+    X_test_ab = X_test_ab.reshape((X_test_ab.shape[0], 1, X_test_ab.shape[1]))
+
+    model = build_cnn_lstm((X_train_ab.shape[1], X_train_ab.shape[2]))
+    model.compile(optimizer="adam", loss="mse", metrics=["mae"])
+    model.fit(X_train_ab, y_train, epochs=10, batch_size=32,
+              validation_data=(X_val_ab, y_val), verbose=0)
+
+    preds = model.predict(X_test_ab).flatten()
+    mse = mean_squared_error(y_test, preds)
+    rmse = np.sqrt(mse)
+    r2 = r2_score(y_test, preds)
+    ablation_results.append({"Experiment": f"Remove {feature}", "MSE": mse, "RMSE": rmse, "R2": r2})
+
+# 2. Sequence Length Ablation
+for seq_len in [5, 10, 20]:
+    print(f"\n[Ablation: SeqLen={seq_len}]")
+    X_train_seq, y_train_seq = create_sequences(X_train, y_train, seq_len)
+    X_val_seq, y_val_seq = create_sequences(X_val, y_val, seq_len)
+    X_test_seq, y_test_seq = create_sequences(X_test, y_test, seq_len)
+
+    model = build_cnn_lstm((X_train_seq.shape[1], X_train_seq.shape[2]))
+    model.compile(optimizer="adam", loss="mse", metrics=["mae"])
+    model.fit(X_train_seq, y_train_seq, epochs=10, batch_size=32,
+              validation_data=(X_val_seq, y_val_seq), verbose=0)
+
+    preds = model.predict(X_test_seq).flatten()
+    mse = mean_squared_error(y_test_seq, preds)
+    rmse = np.sqrt(mse)
+    r2 = r2_score(y_test_seq, preds)
+    ablation_results.append({"Experiment": f"SeqLen={seq_len}", "MSE": mse, "RMSE": rmse, "R2": r2})
+
+# 3. Model Component Ablation
+for variant, builder in [("CNN-LSTM Baseline", build_cnn_lstm),
+                         ("LSTM Only", build_lstm_only),
+                         ("CNN Only", build_cnn_only)]:
+    print(f"\n[Ablation: {variant}]")
+    X_train_r = X_train.reshape((X_train.shape[0], 1, X_train.shape[1]))
+    X_val_r = X_val.reshape((X_val.shape[0], 1, X_val.shape[1]))
+    X_test_r = X_test.reshape((X_test.shape[0], 1, X_test.shape[1]))
+
+    model = builder((X_train_r.shape[1], X_train_r.shape[2]))
+    model.compile(optimizer="adam", loss="mse", metrics=["mae"])
+    model.fit(X_train_r, y_train, epochs=10, batch_size=32,
+              validation_data=(X_val_r, y_val), verbose=0)
+
+    preds = model.predict(X_test_r).flatten()
+    mse = mean_squared_error(y_test, preds)
+    rmse = np.sqrt(mse)
+    r2 = r2_score(y_test, preds)
+    ablation_results.append({"Experiment": variant, "MSE": mse, "RMSE": rmse, "R2": r2})
+
+# ---------------------------
+# Results Summary
+# ---------------------------
+ablation_df = pd.DataFrame(ablation_results)
+print("\nAblation Study Results:")
+print(ablation_df)
+
+# ---------------------------
+# Visualization
+# ---------------------------
+plt.figure(figsize=(10,5))
+plt.barh(ablation_df["Experiment"], ablation_df["R2"], color="skyblue")
+plt.xlabel("R² Score")
+plt.title("Ablation Study - R² Comparison")
+plt.show()
+
+plt.figure(figsize=(10,5))
+plt.barh(ablation_df["Experiment"], ablation_df["RMSE"], color="salmon")
+plt.xlabel("RMSE")
+plt.title("Ablation Study - RMSE Comparison")
+plt.show()
+#Explnable AI In CNN-LSTM
+#LIME
+# 1️⃣ Import LIME
+from lime.lime_tabular import LimeTabularExplainer
+import numpy as np
+import matplotlib.pyplot as plt
+
+# 2️⃣ Prepare data
+# Flatten the input for LIME (samples, features)
+X_train_flat = X_train.reshape(X_train.shape[0], -1)
+X_test_flat = X_test.reshape(X_test.shape[0], -1)
+
+# 6️⃣ Define feature names
+if hasattr(X_train, 'columns'):
+    feature_names = X_train.columns.tolist()  # if X_train is DataFrame
+else:
+    feature_names = [f'feature_{i}' for i in range(X_test.shape[1])]  # replace with your feature list
+
+# 3️⃣ Create the LIME explainer
+explainer = LimeTabularExplainer(
+    training_data=X_train_flat,
+    feature_names=feature_names,
+    mode='regression'
+)
+
+# 4️⃣ Pick a sample to explain
+i = 0  # first test sample
+sample = X_test_flat[i]
+
+# 5️⃣ Define a prediction function for LIME
+def predict_fn(x):
+    x = x.reshape(x.shape[0], 1, X_test.shape[1])  # reshape to (samples, timesteps=1, features)
+    return cnn_lstm_model.predict(x).flatten()      # flatten for LIME
+
+# 6️⃣ Explain the prediction
+exp = explainer.explain_instance(
+    data_row=sample,
+    predict_fn=predict_fn,
+    num_features=10  # top 10 important features
+)
+
+# 7️⃣ Show LIME explanation
+exp.show_in_notebook(show_table=True)
+
+# 8️⃣ Optional: Plot the explanation
+fig = exp.as_pyplot_figure()
+plt.tight_layout()
+plt.show()
+
+#Partial Dependence Plots pdp
+import numpy as np
+import matplotlib.pyplot as plt
+
+# 1️⃣ Flatten input for iteration
+X_test_flat = X_test.reshape(X_test.shape[0], -1)
+
+# 2️⃣ Feature names
+feature_names = [f'feature_{i}' for i in range(X_test_flat.shape[1])]
+
+# 3️⃣ Prediction function
+def cnn_lstm_predict(x):
+    x_reshaped = x.reshape(x.shape[0], 1, X_test.shape[1])
+    return cnn_lstm_model.predict(x_reshaped).flatten()
+
+# 4️⃣ Manual Partial Dependence computation
+features_to_plot = [0, 1, 2, 3]  # pick top features
+fig, ax = plt.subplots(2, 2, figsize=(12, 10))
+
+for i, feature_idx in enumerate(features_to_plot):
+    # values to evaluate
+    values = np.linspace(np.min(X_test_flat[:, feature_idx]),
+                         np.max(X_test_flat[:, feature_idx]), 50)
+    pdp = []
+
+    for v in values:
+        X_temp = X_test_flat.copy()
+        X_temp[:, feature_idx] = v  # fix feature to value v
+        preds = cnn_lstm_predict(X_temp)
+        pdp.append(np.mean(preds))
+
+    row = i // 2
+    col = i % 2
+    ax[row, col].plot(values, pdp, color='blue')
+    ax[row, col].set_title(f'Partial Dependence: {feature_names[feature_idx]}')
+    ax[row, col].set_xlabel(feature_names[feature_idx])
+    ax[row, col].set_ylabel('Predicted Output')
+
+plt.tight_layout()
+plt.show()
+
+import shap
+import numpy as np
+import matplotlib.pyplot as plt
+
+# 1️⃣ Flatten test data for SHAP
+X_test_flat = X_test.reshape(X_test.shape[0], -1)
+
+# 2️⃣ Sample a small subset for SHAP (to save memory)
+X_shap_sample = X_test_flat[:50]
+
+# 3️⃣ Define a prediction function for SHAP
+def cnn_lstm_predict(x):
+    x_reshaped = x.reshape(x.shape[0], 1, X_test.shape[1])
+    return cnn_lstm_model.predict(x_reshaped).flatten()
+
+# 4️⃣ Use KernelExplainer for Keras models
+explainer = shap.KernelExplainer(cnn_lstm_predict, X_shap_sample)
+shap_values = explainer.shap_values(X_shap_sample)
+
+# 5️⃣ Compute mean absolute SHAP values per feature
+mean_abs_shap = np.mean(np.abs(shap_values), axis=0)
+feature_names = [f'feature_{i}' for i in range(X_test_flat.shape[1])]
+
+# 6️⃣ Select top 4 important features
+top_features_idx = np.argsort(mean_abs_shap)[-4:]  # last 4 indices
+top_features_idx = top_features_idx[::-1]          # descending order
+
+print("Top 4 features:", [feature_names[i] for i in top_features_idx])
+
+# 7️⃣ Manual PDP for top 4 features
+fig, ax = plt.subplots(2, 2, figsize=(12, 10))
+
+for i, feature_idx in enumerate(top_features_idx):
+    values = np.linspace(np.min(X_test_flat[:, feature_idx]),
+                         np.max(X_test_flat[:, feature_idx]), 50)
+    pdp = []
+    for v in values:
+        X_temp = X_test_flat.copy()
+        X_temp[:, feature_idx] = v
+        preds = cnn_lstm_predict(X_temp)
+        pdp.append(np.mean(preds))
+
+    row = i // 2
+    col = i % 2
+    ax[row, col].plot(values, pdp, color='blue')
+    ax[row, col].set_title(f'PDP: {feature_names[feature_idx]}')
+    ax[row, col].set_xlabel(feature_names[feature_idx])
+    ax[row, col].set_ylabel('Predicted Output')
+
+plt.tight_layout()
+plt.show()
+
 
